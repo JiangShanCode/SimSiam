@@ -18,7 +18,7 @@ class mydata(Dataset):
         self.transform = transform 
         # self.resize = tf.Resize(256)
         # self.tf2tr = tf.ToTensor()
-        self.imgs_path = natsorted(list(scandir(self.root, recursive=True, full_path=True)))
+        self.imgs_path = natsorted(list(scandir(self.root, recursive=True, full_path=False)))
         self.imgs = []
         for path in self.imgs_path:
             with open(os.path.join(root,path), 'rb') as f:
