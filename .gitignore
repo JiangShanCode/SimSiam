@@ -1,6 +1,5 @@
 # ignored folders
 exp/*
-imgs/*
 
 # ignored files with suffix
 *.pth
