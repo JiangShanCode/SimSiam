@@ -1,0 +1,11 @@
+# ignored folders
+exp/*
+imgs/*
+
+# ignored files with suffix
+*.pth
+*.out
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+

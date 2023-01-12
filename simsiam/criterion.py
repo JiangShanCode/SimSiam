@@ -1,6 +1,5 @@
 from torch import nn
 
-
 class SimSiamLoss(nn.Module):
     def __init__(self, version='simplified'):
         super().__init__()

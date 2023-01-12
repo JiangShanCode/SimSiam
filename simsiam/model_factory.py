@@ -1,7 +1,6 @@
 from torch import nn
 from .resnet_cifar import ResNet18, ResNet34, ResNet50, ResNet101, ResNet152
 
-
 class projection_MLP(nn.Module):
     def __init__(self, in_dim, out_dim, num_layers=2):
         super().__init__()
@@ -26,6 +25,7 @@ class projection_MLP(nn.Module):
 
     def forward(self, x):
         if self.num_layers == 2:
+            # print("x",x.size())
             x = self.layer1(x)
             x = self.layer3(x)
         elif self.num_layers == 3:
@@ -55,17 +55,26 @@ class prediction_MLP(nn.Module):
 
         return x
 
+class l2_normalize(nn.Module):
+    def __init__(self):
+        super().__init__()
+    def forward(self, x):
+        x = nn.functional.normalize(x,p=2.0,dim=1)
+        return x
 
 class SimSiam(nn.Module):
     def __init__(self, args):
         super(SimSiam, self).__init__()
         self.backbone = SimSiam.get_backbone(args.arch)
         out_dim = self.backbone.fc.weight.shape[1]
+        # print("out_dim",out_dim)
         self.backbone.fc = nn.Identity()
 
         self.projector = projection_MLP(out_dim, args.feat_dim,
                                         args.num_proj_layers)
 
+        # self.l2_normalize = l2_normalize()
+        
         self.encoder = nn.Sequential(
             self.backbone,
             self.projector

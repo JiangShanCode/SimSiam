@@ -1,8 +1,9 @@
 import argparse
+import imp
 import time
 import math
 from os import path, makedirs
-
+from PIL import Image
 import torch
 from torch import optim
 from torch.utils.data import DataLoader
@@ -15,10 +16,11 @@ from simsiam.loader import TwoCropsTransform
 from simsiam.model_factory import SimSiam
 from simsiam.criterion import SimSiamLoss
 from simsiam.validation import KNNValidation
+import mydata
 
 parser = argparse.ArgumentParser('arguments for training')
 parser.add_argument('--data_root', type=str, help='path to dataset directory')
-parser.add_argument('--exp_dir', type=str, help='path to experiment directory')
+parser.add_argument('--exp_dir', type=str,default="exp", help='path to experiment directory')
 parser.add_argument('--trial', type=str, default='1', help='trial id')
 parser.add_argument('--img_dim', default=32, type=int)
 
@@ -28,17 +30,17 @@ parser.add_argument('--feat_dim', default=2048, type=int, help='feature dimensio
 parser.add_argument('--num_proj_layers', type=int, default=2, help='number of projection layer')
 parser.add_argument('--batch_size', type=int, default=512, help='batch_size')
 parser.add_argument('--num_workers', type=int, default=8, help='num of workers to use')
-parser.add_argument('--epochs', type=int, default=800, help='number of training epochs')
-parser.add_argument('--gpu', default=None, type=int, help='GPU id to use.')
+parser.add_argument('--epochs', type=int, default=100, help='number of training epochs')
+parser.add_argument('--gpu', default=0, type=int, help='GPU id to use.')
 parser.add_argument('--loss_version', default='simplified', type=str,
                     choices=['simplified', 'original'],
                     help='do the same thing but simplified version is much faster. ()')
 parser.add_argument('--print_freq', default=10, type=int, help='print frequency')
-parser.add_argument('--eval_freq', default=5, type=int, help='evaluate model frequency')
-parser.add_argument('--save_freq', default=50, type=int, help='save model frequency')
+parser.add_argument('--eval_freq', default=10, type=int, help='evaluate model frequency')
+parser.add_argument('--save_freq', default=10, type=int, help='save model frequency')
 parser.add_argument('--resume', default=None, type=str, help='path to latest checkpoint')
 
-parser.add_argument('--learning_rate', type=float, default=0.05, help='learning rate')
+parser.add_argument('--learning_rate', type=float, default=0.00625, help='learning rate')
 parser.add_argument('--weight_decay', type=float, default=5e-4, help='weight decay')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 
@@ -64,10 +66,13 @@ def main():
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
 
-    train_set = datasets.CIFAR10(root=args.data_root,
-                                 train=True,
-                                 download=True,
-                                 transform=TwoCropsTransform(train_transforms))
+    # train_set = datasets.CIFAR10(root=args.data_root,
+    #                              train=True,
+    #                              download=True,
+    #                              transform=TwoCropsTransform(train_transforms))
+    train_set = mydata.mydata(root=args.data_root,transform=TwoCropsTransform(train_transforms))
+
+    # print(1)
 
     train_loader = DataLoader(dataset=train_set,
                               batch_size=args.batch_size,
@@ -77,11 +82,16 @@ def main():
                               drop_last=True)
 
     model = SimSiam(args)
-
+    
+    # checkpoint = torch.load('/root/workspace/SimSiam-91.9-top1-acc-on-CIFAR10/exp/1/ckpt_epoch_300_1.pth')    
+    # model.load_state_dict(checkpoint['state_dict'])
+    # torch.save(model, './simsiam.pkl')
+    
     optimizer = optim.SGD(model.parameters(),
                           lr=args.learning_rate,
                           momentum=args.momentum,
                           weight_decay=args.weight_decay)
+
 
     criterion = SimSiamLoss(args.loss_version)
 
@@ -102,7 +112,7 @@ def main():
 
     # routine
     best_acc = 0.0
-    validation = KNNValidation(args, model.encoder)
+    # validation = KNNValidation(args, model.encoder)
     for epoch in range(start_epoch, args.epochs+1):
 
         adjust_learning_rate(optimizer, epoch, args)
@@ -112,30 +122,30 @@ def main():
         train_loss = train(train_loader, model, criterion, optimizer, epoch, args)
         logger.add_scalar('Loss/train', train_loss, epoch)
 
-        if epoch % args.eval_freq == 0:
-            print("Validating...")
-            val_top1_acc = validation.eval()
-            print('Top1: {}'.format(val_top1_acc))
+        # if epoch % args.eval_freq == 0:
+        #     print("Validating...")
+        #     val_top1_acc = validation.eval()
+        #     print('Top1: {}'.format(val_top1_acc))
 
-            # save the best model
-            if val_top1_acc > best_acc:
-                best_acc = val_top1_acc
+        #     # save the best model
+        #     if val_top1_acc > best_acc:
+        #         best_acc = val_top1_acc
 
-                save_checkpoint(epoch, model, optimizer, best_acc,
-                                path.join(trial_dir, '{}_best.pth'.format(args.trial)),
-                                'Saving the best model!')
-            logger.add_scalar('Acc/val_top1', val_top1_acc, epoch)
+        #         save_checkpoint(epoch, model, optimizer, best_acc,
+        #                         path.join(trial_dir, '{}_best.pth'.format(args.trial)),
+        #                         'Saving the best model!')
+        #     logger.add_scalar('Acc/val_top1', val_top1_acc, epoch)
 
         # save the model
         if epoch % args.save_freq == 0:
-            save_checkpoint(epoch, model, optimizer, val_top1_acc,
+            save_checkpoint(epoch, model, optimizer,
                             path.join(trial_dir, 'ckpt_epoch_{}_{}.pth'.format(epoch, args.trial)),
                             'Saving...')
 
     print('Best accuracy:', best_acc)
 
     # save model
-    save_checkpoint(epoch, model, optimizer, val_top1_acc,
+    save_checkpoint(epoch, model, optimizer,
                     path.join(trial_dir, '{}_last.pth'.format(args.trial)),
                     'Saving the model at the last epoch.')
 
@@ -152,7 +162,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
-    for i, (images, _) in enumerate(train_loader):
+    for i, images in enumerate(train_loader):
 
         if args.gpu is not None:
             images[0] = images[0].cuda(args.gpu, non_blocking=True)
@@ -233,23 +243,32 @@ class ProgressMeter(object):
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
-def save_checkpoint(epoch, model, optimizer, acc, filename, msg):
+# def save_checkpoint(epoch, model, optimizer, acc, filename, msg):
+#     state = {
+#         'epoch': epoch,
+#         'arch': args.arch,
+#         'state_dict': model.state_dict(),
+#         'optimizer': optimizer.state_dict(),
+#         'top1_acc': acc
+#     }
+#     torch.save(state, filename)
+#     print(msg)
+
+def save_checkpoint(epoch, model, optimizer, filename, msg):
     state = {
         'epoch': epoch,
         'arch': args.arch,
         'state_dict': model.state_dict(),
-        'optimizer': optimizer.state_dict(),
-        'top1_acc': acc
+        'optimizer': optimizer.state_dict()
     }
     torch.save(state, filename)
     print(msg)
-
 
 def load_checkpoint(model, optimizer, filename):
     checkpoint = torch.load(filename, map_location='cuda:0')
     start_epoch = checkpoint['epoch']
     model.load_state_dict(checkpoint['state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
+    # optimizer.load_state_dict(checkpoint['optimizer'])
 
     return start_epoch, model, optimizer
 
